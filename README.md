@@ -1,6 +1,6 @@
-This repository contains the scripts to generate five datasets:
-//
-<img width="468" height="281" alt="image" src="https://github.com/user-attachments/assets/a6f120bb-e3ee-4174-a13b-9782cae37f3b" />
+# Sinking City: Multidimensional Datasets for Modelling the Sinking Jakarta
+
+Jakarta, the world’s fastest-sinking city, faces complex urban challenges from the complexity of its urban morphology, infrastructure, and environmental conditions. This study presents a descriptor for a multidimensional database of Jakarta, Indonesia, to help understand how the city is subsiding. The data comprise land subsidence modelling to quantify subsidence rates in Jakarta, spectral indices to highlight vegetation and built-up areas, namely the Normalised Difference Vegetation Index (NDVI) and the Normalised Difference Building Index (NDBI), and urban morphology datasets, including impervious surface areas and the proportion of residential areas. Data processing was performed using Google Earth Engine (GEE) and Python to generate a critical dataset to support analysis and modelling of urban resilience, climate adaptation, and mitigation. Robust validation techniques were performed to ensure data accuracy.
 
 # 1. Land Subsidence Monitoring for DKI Jakarta
 
