@@ -1,9 +1,5 @@
 This repository contains the scripts to generate five datasets:
-No	Title	Temporal Scale	Description	Data Type	Sources
-1	Land Subsidence	2016-2024	Land subsidence rates.	Raster	Copernicus
-2	NDVI and NDBI	2015-2024	Normalised Difference Vegetation Index (NDVI) maps showing green-covered areas and Normalised Difference Built-up Index (NDBI) maps highlighting urban areas.	Raster	Landsat
-3	Impervious Surface Area	2016-2024	Spatial layer showing the extent of impervious surfaces such as roads and buildings.	Raster	Sentinel-2
-4	Proportion of Residential Area	2023	Proportion of land classified as residential at the RW (neighbourhood) level.	Vector	Google Open Buildings 2.5D Temporal Dataset
+//
 <img width="468" height="281" alt="image" src="https://github.com/user-attachments/assets/a6f120bb-e3ee-4174-a13b-9782cae37f3b" />
 
 # 1. Land Subsidence Monitoring for DKI Jakarta
