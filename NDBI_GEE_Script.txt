@@ -1,0 +1,197 @@
+/****************************************************
+ * NDBI BuiltUp vs NonBuilt
+ * Years: 1990, 2000, 2010, 2024
+ * Output bands: NDBI, BuiltUp, NonBuilt
+ ****************************************************/
+
+/***************************************************
+ * Built-Up Area Expansion Mapping
+ * Sensor: Landsat 5, Landsat 7, Landsat 8/9
+ * Year: 1990, 2000, 2010, 2024
+ * Method: Normalized Difference Built-up Index (NDBI)
+ * Output: Built-Up Area, Non-Built Area
+ * Software: Google Earth Engine
+ ***************************************************/
+
+/***************************************************
+Script Description:
+This script maps the expansion of built-up areas in DKI Jakarta using
+multi-temporal Landsat satellite imagery. Data are drawn from Landsat 5,
+Landsat 7, and Landsat 8/9, covering annual median composites from the
+years 1990, 2000, 2010, and 2024 as representative snapshots of land
+cover change over a 34-year period across Jakarta Province.
+
+Processing steps:
+1. Load Landsat imagery (Landsat 5, 7, 8/9 Surface Reflectance)
+2. Apply cloud, shadow, and saturation masking using QA_PIXEL
+   and QA_RADSAT bands
+3. Apply surface reflectance scaling factors
+4. Generate annual median composite per epoch
+5. Compute NDBI index using formula:
+   NDBI = (SWIR - NIR) / (SWIR + NIR)
+6. Apply threshold classification: NDBI ≥ 0.0 → Built-Up
+7. Calculate per-class area statistics (km²)
+8. Export classified maps and area results
+
+Classification threshold applied:
+- Built-Up   : NDBI ≥ 0.0
+- Non-Built  : NDBI < 0.0
+****************************************************/
+
+// =================== ROI ===================
+var roi = ee.FeatureCollection(
+  "projects/ace-forest-404017/assets/DKI_Jakarta"
+);
+
+Map.centerObject(roi, 10);
+Map.addLayer(
+  roi.style({
+    color: '000000',
+    fillColor: '00000000',
+    width: 2
+  }),
+  {},
+  'ROI',
+  true
+);
+
+// =================== Parameters ===================
+var SCALE = 30;
+var EXPORT_FOLDER = 'GEE_Exports_NDBI';
+var NDBI_THRESH = 0.0;
+
+// =================== Year configs ===================
+// Landsat 5 / 7 : NIR = SR_B4, SWIR1 = SR_B5
+// Landsat 9     : NIR = SR_B5, SWIR1 = SR_B6
+var CFGS = [
+  {year: 1990, col: "LANDSAT/LT05/C02/T1_L2", start: "1990-01-01", end: "1990-12-31", nir: "SR_B4", swir: "SR_B5"},
+  {year: 2000, col: "LANDSAT/LE07/C02/T1_L2", start: "2000-01-01", end: "2000-12-31", nir: "SR_B4", swir: "SR_B5"},
+  {year: 2010, col: "LANDSAT/LE07/C02/T1_L2", start: "2010-01-01", end: "2010-12-31", nir: "SR_B4", swir: "SR_B5"},
+  {year: 2024, col: "LANDSAT/LC09/C02/T1_L2", start: "2024-01-01", end: "2024-12-31", nir: "SR_B5", swir: "SR_B6"}
+];
+
+// =================== Helper functions ===================
+
+// Cloud / shadow / saturation mask
+function maskLandsatC2L2(img) {
+  var qa = img.select('QA_PIXEL');
+
+  var mask = qa.bitwiseAnd(1 << 0).eq(0)
+    .and(qa.bitwiseAnd(1 << 1).eq(0))
+    .and(qa.bitwiseAnd(1 << 2).eq(0))
+    .and(qa.bitwiseAnd(1 << 3).eq(0))
+    .and(qa.bitwiseAnd(1 << 4).eq(0))
+    .and(qa.bitwiseAnd(1 << 5).eq(0));
+
+  var satMask = img.select('QA_RADSAT').eq(0);
+  return img.updateMask(mask).updateMask(satMask);
+}
+
+// Scale surface reflectance
+function scaleSR(img) {
+  var scaled = img.select('SR_B.')
+    .multiply(0.0000275)
+    .add(-0.2);
+
+  return img.addBands(scaled, null, true);
+}
+
+// Annual NDBI composite
+function annualNDBI(cfg) {
+  return ee.ImageCollection(cfg.col)
+    .filterBounds(roi)
+    .filterDate(cfg.start, cfg.end)
+    .map(maskLandsatC2L2)
+    .map(scaleSR)
+    .map(function (img) {
+      var ndbi = img.normalizedDifference(
+        [cfg.swir, cfg.nir]   // (SWIR − NIR)/(SWIR + NIR)
+      ).rename('NDBI');
+      return img.addBands(ndbi);
+    })
+    .select('NDBI')
+    .median()
+    .clip(roi)
+    .toFloat();
+}
+
+// NDBI → built / non-built
+function classifyBuilt(ndbi) {
+  var built = ndbi.gte(NDBI_THRESH)
+    .rename('BuiltUp')
+    .toFloat();
+
+  var non = ndbi.lt(NDBI_THRESH)
+    .rename('NonBuilt')
+    .toFloat();
+
+  return ndbi.rename('NDBI')
+    .toFloat()
+    .addBands([built, non])
+    .clip(roi);
+}
+
+// =================== AREA CALCULATION ===================
+function areaKm2(img, band) {
+  var areaImg = ee.Image.pixelArea()
+    .divide(1e6)       
+    .rename(band)     
+    .updateMask(img.select(band));
+
+  return areaImg.reduceRegion({
+    reducer: ee.Reducer.sum(),
+    geometry: roi.geometry(),
+    scale: SCALE,
+    maxPixels: 1e13
+  }).get(band);
+}
+
+// =================== Visualization ===================
+var ndbiVis = {
+  min: -0.5,
+  max: 0.5,
+  palette: ['blue', 'white', 'red']
+};
+
+var builtVis = {
+  min: 0,
+  max: 1,
+  palette: ['ffffff', 'ff0000']
+};
+
+// =================== Run ===================
+print('--- NDBI threshold ≥ ' + NDBI_THRESH + ' = BuiltUp ---');
+
+CFGS.forEach(function (cfg) {
+
+  var ndbi = annualNDBI(cfg);
+  var out  = classifyBuilt(ndbi);
+
+  // Area statistics
+  var builtArea = areaKm2(out, 'BuiltUp');
+  var nonArea   = areaKm2(out, 'NonBuilt');
+
+  print(cfg.year + ' BuiltUp (km²):', builtArea);
+  print(cfg.year + ' NonBuilt (km²):', nonArea);
+
+  // Map layers
+  Map.addLayer(out.select('NDBI'), ndbiVis, 'NDBI ' + cfg.year, false);
+  Map.addLayer(
+    out.select('BuiltUp'),
+    builtVis,
+    'BuiltUp ' + cfg.year,
+    cfg.year === 1990
+  );
+
+  // Export
+  Export.image.toDrive({
+    image: out, // NDBI + BuiltUp + NonBuilt (all Float32)
+    description: 'NDBI_BuiltMask_' + cfg.year,
+    folder: EXPORT_FOLDER,
+    fileNamePrefix: 'NDBI_BuiltMask_' + cfg.year,
+    region: roi.geometry(),
+    scale: SCALE,
+    maxPixels: 1e13
+  });
+
+});
